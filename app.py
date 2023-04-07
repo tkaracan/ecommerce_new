@@ -1,167 +1,155 @@
-from flask import Flask 
+from flask import Flask, jsonify, render_template, request, redirect, make_response
 from flask_sqlalchemy import SQLAlchemy
-
 from datetime import datetime, timedelta
-from faker import Faker 
+import jwt
 
-import random
-
-fake = Faker()
-
+#create a new instance of the flask class. create a flask object
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db.sqlite3'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False 
+#put configuration to the app. -----------here: /// means file in the current directory
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dbtrl4.sqlite3'
+#surpress trivial warnings in terminal
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+#for login auth token
+app.config['SECRET_KEY'] = 'tugrul'
+
+#instantiate (create) flask sql alchemy object
 db = SQLAlchemy(app)
-#db.init_app(app)
+
+#db.init_app(app) #-- this is the same, but with multiple py files
+
+#now create MODELS like roles
+#from each class you need to inherit from Model
 
 class Customer(db.Model):
-    id = db.Column(db.Integer, primary_key=True) 
-    first_name = db.Column(db.String(50), nullable=False)
-    last_name = db.Column(db.String(50), nullable=False)
-    address = db.Column(db.String(500), nullable=False)
-    city = db.Column(db.String(50), nullable=False)
-    postcode = db.Column(db.String(50), nullable=False)
-    email = db.Column(db.String(50), nullable=False, unique=True)
-
+    id = db.Column(db.Integer, primary_key = True)
+    username = db.Column(db.String(50), nullable=False, unique = True)
+    password = db.Column(db.String(50), nullable=False)
+    is_admin = db.Column(db.Boolean, default = False)
+    #this will create a psudo column on Order. ASK ABOUT THIS!!!!!!!!!!!!!!
     orders = db.relationship('Order', backref='customer')
 
+#this is for order-product relationship
 order_product = db.Table('order_product',
-    db.Column('order_id', db.Integer, db.ForeignKey('order.id'), primary_key=True),
-    db.Column('product_id', db.Integer, db.ForeignKey('product.id'), primary_key=True)
-)
+                         db.Column('order_id', db.Integer, db.ForeignKey('order.id'), primary_key=True),
+                         db.Column('product_id', db.Integer, db.ForeignKey('product.id'), primary_key=True)
+                         )
 
 class Order(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    order_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    shipped_date = db.Column(db.DateTime)
-    delivered_date = db.Column(db.DateTime)
-    coupon_code = db.Column(db.String(50))
-    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
-
+    id = db.Column(db.Integer, primary_key = True)
+    order_date = db.Column(db.DateTime, nullable = False, default = datetime.utcnow)
+    #ForeignKey means this column is coming from another table. name of the table should be lowercase of the class name
+    customer_id =db.Column(db.Integer,db.ForeignKey('customer.id'), nullable=False)
+    #when you want to know products on the order. Ask more about this!!!!!!!!!!!!!!!!
     products = db.relationship('Product', secondary=order_product)
 
 class Product(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False, unique=True)
-    price = db.Column(db.Integer, nullable=False)
+    id = db.Column(db.Integer, primary_key = True)
+    name = db.Column(db.String(50), nullable=False, unique = True) #(50) --> max 50 character str
+    description = db.Column(db.String(140))  # (50) --> max 50 character str
+    price = db.Column(db.Integer, nullable=False) #nullable = true means you cant leave it blank
 
-def add_customers():
-    for _ in range(100):
-        customer = Customer(
-            first_name=fake.first_name(),
-            last_name=fake.last_name(),
-            address=fake.street_address(),
-            city=fake.city(),
-            postcode=fake.postcode(),
-            email=fake.email()
-        )
-        db.session.add(customer)
-    db.session.commit()
+db.create_all()
 
-def add_orders():
+
+@app.route("/user", methods=["GET"])
+def user_view():
     customers = Customer.query.all()
-
-    for _ in range(1000):
-        #choose a random customer
-        customer = random.choice(customers)
-
-        ordered_date = fake.date_time_this_year()
-        shipped_date = random.choices([None, fake.date_time_between(start_date=ordered_date)], [10, 90])[0]
-
-        #choose either random None or random date for delivered and shipped
-        delivered_date = None
-        if shipped_date:
-            delivered_date = random.choices([None, fake.date_time_between(start_date=shipped_date)], [50, 50])[0]
-
-        #choose either random None or one of three coupon codes
-        coupon_code = random.choices([None, '50OFF', 'FREESHIPPING', 'BUYONEGETONE'], [80, 5, 5, 5])[0]
-
-        order = Order(
-            customer_id=customer.id,
-            order_date=ordered_date,
-            shipped_date=shipped_date,
-            delivered_date=delivered_date,
-            coupon_code=coupon_code
-        )
-
-        db.session.add(order)
-    db.session.commit()
-
-def add_products():
-    for _ in range(10):
-        product = Product(
-            name=fake.color_name(),
-            price=random.randint(10,100)
-        )
-        db.session.add(product)
-    db.session.commit()
-    
-def add_order_products():
-    orders = Order.query.all()
-    products = Product.query.all()
-
-    for order in orders:
-        #select random k
-        k = random.randint(1, 3)
-        # select random products
-        purchased_products = random.sample(products, k)
-        order.products.extend(purchased_products)
-        
-    db.session.commit()
-
-def create_random_data():
-    db.create_all()
-    add_customers()
-    add_orders()
-    add_products()
-    add_order_products()
-
-def get_orders_by(customer_id=1):
-    print('Get Orders by Customer')
-    customer_orders = Order.query.filter_by(customer_id=customer_id).all()
-    for order in customer_orders:
-        print(order.order_date)
-
-def get_pending_orders():
-    print('Pending Orders')
-    pending_orders = Order.query.filter(Order.shipped_date.is_(None)).order_by(Order.order_date.desc()).all()
-    for order in pending_orders:
-        print(order.order_date)
-
-def how_many_customers():
-    print('How many customers?')
-    print(Customer.query.count())
-
-def orders_with_code():
-    print('Orders with coupon code')
-    orders = Order.query.filter(Order.coupon_code.isnot(None)).filter(Order.coupon_code != 'FREESHIPPING').all()
-    for order in orders:
-        print(order.coupon_code)
-
-def revenue_in_last_x_days(x_days=30):
-    print('Revenue past x days')
-    print(db.session
-        .query(db.func.sum(Product.price))
-        .join(order_product).join(Order)
-        .filter(Order.order_date > (datetime.now() - timedelta(days=x_days))
-        ).scalar()
-    )
-
-def average_fulfillment_time():
-    print('Average fulfillment time')
-    print(
-        db.session.query(
-            db.func.time(
-                db.func.avg(
-                    db.func.strftime('%s', Order.shipped_date) - db.func.strftime('%s', Order.order_date)
-                ), 
-                'unixepoch'
-            )
-        ).filter(Order.shipped_date.isnot(None)).scalar()
-    )
-
-def get_customers_who_have_purchased_x_dollars(amount=500):
-    print('All customers who have purchased x dollars')
-    customers = db.session.query(Customer).join(Order).join(order_product).join(Product).group_by(Customer).having(db.func.sum(Product.price) > amount).all()
+    customer_list = []
     for customer in customers:
-        print(customer.first_name)
+        customer_dict = {
+            'id': customer.id,
+            'username': customer.username,
+            'is_admin': customer.is_admin,
+            'order_count': len(customer.orders)
+        }
+        customer_list.append(customer_dict)
+
+        # if customer.is_admin == True:
+        #      customer_list[-1]["tugrul dedi ki:"]=('memeleeer')
+
+
+    return jsonify(customer_list)
+
+
+@app.route("/user", methods=["POST"])
+def create_user():
+    # Parse the JSON payload from the request
+    data = request.get_json()
+    # Get the values for the new customer from the payload
+    username = data.get('username')
+    password = data.get('password')
+    is_admin = data.get('is_admin', False) # Optional, default to False if not provided
+    # Create a new Customer object
+    new_customer = Customer(username=username, password=password, is_admin=is_admin)
+    # Add the new customer to the database
+    db.session.add(new_customer)
+    db.session.commit()
+    # Return a JSON representation of the new customer with a 201 (Created) status code
+    return jsonify({
+        'id': new_customer.id,
+        'username': new_customer.username,
+        'is_admin': new_customer.is_admin,
+        'order_count': 0 # New customers have no orders yet
+    }), 201
+
+
+
+
+
+@app.route("/product", methods=["GET"])
+def product_view():
+    products = Product.query.all()
+    product_list = []
+    for product in products:
+        customer_dict = {
+            'id': product.id,
+            'name': product.name,
+            'price': product.price,
+            'description' : product.description
+
+        }
+        product_list.append(customer_dict)
+
+    return jsonify(product_list)
+
+@app.route("/product", methods=["POST"])
+def add_product():
+    # Parse the JSON payload from the request
+    data = request.get_json()
+
+    name = data.get('name')
+    price = data.get('price')
+    description = data.get('description')
+    new_product = Product(name=name, price=price, description=description)
+
+    db.session.add(new_product)
+    db.session.commit()
+
+    return jsonify({
+        'id': new_product.id,
+        'name': new_product.name,
+        'description': new_product.description,
+        'price': new_product.price
+    }), 201
+
+@app.route('/login')
+def login():
+    auth = request.authorization
+    if auth and auth.password == 'abc':
+        token = jwt.encode({'user': auth.username, 'exp' : datetime.utcnow()+timedelta(minutes=1)}, app.config['SECRET_KEY'])
+
+        #return jsonify({'token': token.decode('UTF-8')})
+        return token
+
+    return make_response('Olmadi anam', 401, {'WWW-Authenticate' : 'Basic realm = "Login Required"'})
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+
+
+
+
+
+
