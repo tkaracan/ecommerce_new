@@ -65,7 +65,7 @@ def user_view():
         customer_list.append(customer_dict)
 
         # if customer.is_admin == True:
-        #      customer_list[-1]["tugrul dedi ki:"]=('memeleeer')
+        #      customer_list[-1]["tugrul dedi ki:"]=('deneme')
 
 
     return jsonify(customer_list)
