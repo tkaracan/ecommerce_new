@@ -2,6 +2,7 @@ from flask import Flask, jsonify, render_template, request, redirect, make_respo
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 import jwt
+from functools import wraps
 
 #create a new instance of the flask class. create a flask object
 app = Flask(__name__)
@@ -49,6 +50,8 @@ class Product(db.Model):
     price = db.Column(db.Integer, nullable=False) #nullable = true means you cant leave it blank
 
 db.create_all()
+
+
 
 
 @app.route("/user", methods=["GET"])
@@ -132,16 +135,11 @@ def add_product():
         'price': new_product.price
     }), 201
 
-@app.route('/login')
-def login():
-    auth = request.authorization
-    if auth and auth.password == 'abc':
-        token = jwt.encode({'user': auth.username, 'exp' : datetime.utcnow()+timedelta(minutes=1)}, app.config['SECRET_KEY'])
 
-        #return jsonify({'token': token.decode('UTF-8')})
-        return token
 
-    return make_response('Olmadi anam', 401, {'WWW-Authenticate' : 'Basic realm = "Login Required"'})
+
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
