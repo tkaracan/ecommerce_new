@@ -23,8 +23,8 @@ def login():
     if username not in users or users[username] != password:
         return jsonify({'message': 'Wrong Password or Username'}), 401
 
-    token = jwt.encode({'user': username}, app.config['SECRET_KEY'])
-    print("THIS IS TOKEN: ",token)
+    token = jwt.encode({'user': username}, app.config['SECRET_KEY'], algorithm='HS256')
+    print("THIS IS TOKEN: ", token)
     return jsonify({'token': token})
 
 
@@ -32,17 +32,15 @@ def login():
 def protected():
     token = request.headers.get('Authorization')
 
-
     if not token:
         return jsonify({'message': 'No token provided'}), 401
 
     try:
         print("trying")
-        decoded_token = jwt.decode(token, app.config['SECRET_KEY'])
-    except token == 0:
+        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+    except jwt.InvalidTokenError:
         print("here:")
         print(token)
-        #print(decoded_token)
         return jsonify({'message': 'Invalid token'}), 401
 
     username = decoded_token.get('user')
