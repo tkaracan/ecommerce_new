@@ -1,7 +1,9 @@
 from flask import Flask, request, jsonify
+
 import jwt
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dbtrl4.sqlite3'
 app.config['SECRET_KEY'] = 'A'  # Replace with your own secret key
 
 # Fake user database for testing
@@ -11,11 +13,12 @@ users = {
 }
 
 
+
 @app.route('/login', methods=['POST'])
 def login():
     data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    username = data.get('username', None)
+    password = data.get('password', None)
 
     if not username or not password:
         return jsonify({'message': 'Missing username or password'}), 400
