@@ -4,23 +4,23 @@ from MODELS import Customer, Product, db, Order
 
 import jwt
 
-#create a new instance of the flask class. create a flask object
+# create a new instance of the flask class. create a flask object
 app = Flask(__name__)
-#put configuration to the app. -----------here: /// means file in the current directory
+# put configuration to the app. -----------here: /// means file in the current directory
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dbtrl4.sqlite3'
-#surpress trivial warnings in terminal
+# surpress trivial warnings in terminal
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-#for login auth token
+# for login auth token
 app.config['SECRET_KEY'] = 'tugrul'
 
-#instantiate (create) flask sql alchemy object
 db.init_app(app)
 
-#db.init_app(app) #-- this is the same, but with multiple py files
 
-#now create MODELS like roles
-#from each class you need to inherit from Model
-#db.create_all()
+# db.init_app(app) #-- this is the same, but with multiple py files
+
+# now create MODELS like roles
+# from each class you need to inherit from Model
+# db.create_all()
 
 
 @app.route('/login', methods=['POST'])
@@ -38,10 +38,7 @@ def login():
 
     token = jwt.encode({'customer': username}, app.config['SECRET_KEY'], algorithm='HS256')
     return jsonify({'token': token})
-
-
-
-
+print("try")
 
 @app.route("/user", methods=["GET"])
 def user_view():
@@ -56,10 +53,6 @@ def user_view():
         }
         customer_list.append(customer_dict)
 
-        # if customer.is_admin == True:
-        #      customer_list[-1]["tugrul dedi ki:"]=('deneme')
-
-
     return jsonify(customer_list)
 
 
@@ -70,7 +63,7 @@ def create_user():
     # Get the values for the new customer from the payload
     username = data.get('username')
     password = data.get('password')
-    is_admin = data.get('is_admin', False) # Optional, default to False if not provided
+    is_admin = data.get('is_admin', False)  # Optional, default to False if not provided
     # Create a new Customer object
     new_customer = Customer(username=username, password=password, is_admin=is_admin)
     # Add the new customer to the database
@@ -81,11 +74,8 @@ def create_user():
         'id': new_customer.id,
         'username': new_customer.username,
         'is_admin': new_customer.is_admin,
-        'order_count': 0 # New customers have no orders yet
+        'order_count': 0  # New customers have no orders yet
     }), 201
-
-
-
 
 
 @app.route("/product", methods=["GET"])
@@ -98,11 +88,11 @@ def product_view():
             'name': product.name,
             'price': product.price,
 
-
         }
         product_list.append(customer_dict)
 
     return jsonify(product_list)
+
 
 @app.route("/product/<product_id>", methods=["GET"])
 def product_detail(product_id):
@@ -117,28 +107,26 @@ def product_detail(product_id):
         'price': product.price,
         'description': product.description
     })
+
+
 @app.route("/product", methods=["POST"])
 def add_product():
-
-
     token = request.headers.get('Authorization')
 
     if not token:
         return jsonify({'message': 'No token provided'}), 401
-
     try:
         decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
     except jwt.InvalidTokenError:
         return jsonify({'message': 'Invalid token'}), 401
 
-    username = decoded_token.get('customer')
+    username = decoded_token.get('customer')  # bu neden str?
     customer = Customer.query.filter_by(username=username).first()
-
 
     if not customer:
         return jsonify({'message': 'Invalid user'}), 401
     if customer.is_admin == False:
-        return("You cant add products here, go away")
+        return ("You cant add products here, go away")
     else:
 
         data = request.get_json()
@@ -158,21 +146,63 @@ def add_product():
     }), 201
 
 
+@app.route("/shop", methods=["POST"])
+def add_to_cart():
+    token = request.headers.get('Authorization')
+
+    if not token:
+        return jsonify({'message': 'You need to sign in to buy stuff dude'}), 401
+    try:
+        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Invalid token'}), 401
+    username = decoded_token.get('customer')
+    customer = Customer.query.filter_by(username=username).first()
+
+    if not customer:
+        return jsonify({'message': 'Invalid user'}), 401
+    data = request.get_json()
+
+    customer_id = customer.id
+    print(customer_id, "--------------------------------------")
+    #products = data.get('products')  # Changed 'product' to 'products'
+
+
+    #chatGPT begin
+    product_ids = data.get('products')  # Changed 'product' to 'products'
+
+    # Convert the list of product IDs into a list of Product objects
+    products = Product.query.filter(Product.id.in_(product_ids)).all()
+
+    if not products:
+        return jsonify({'message': 'No products found'}), 404
+
+    #ChatGPT end
 
 
 
+    new_cart = Order(customer_id=customer_id, products=products)
+
+    db.session.add(new_cart)
+    db.session.commit()
+
+    product_dicts = [
+        {
+            'id': product.id,
+            'name': product.name,
+            'description': product.description,
+            'price': product.price
+        }
+        for product in new_cart.products
+    ]
 
 
-
+    return jsonify({
+        'id': new_cart.id,
+        'customer_id': new_cart.customer_id,
+        'product': product_dicts
+    }), 201
 
 
 if __name__ == "__main__":
     app.run(debug=True)
-
-
-
-
-
-
-
-
