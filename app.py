@@ -1,13 +1,13 @@
 from flask import Flask, jsonify, render_template, request, redirect, make_response
 from flask_sqlalchemy import SQLAlchemy
-from MODELS import Customer, Product, db, Order
+from MODELS import Customer, Product, db, Order, Cart
 
 import jwt
 
 # create a new instance of the flask class. create a flask object
 app = Flask(__name__)
 # put configuration to the app. -----------here: /// means file in the current directory
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dbtrl4.sqlite3'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dataCAN.sqlite3'
 # surpress trivial warnings in terminal
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # for login auth token
@@ -20,7 +20,8 @@ db.init_app(app)
 
 # now create MODELS like roles
 # from each class you need to inherit from Model
-# db.create_all()
+with app.app_context():
+    db.create_all()
 
 
 @app.route('/login', methods=['POST'])
@@ -38,7 +39,7 @@ def login():
 
     token = jwt.encode({'customer': username}, app.config['SECRET_KEY'], algorithm='HS256')
     return jsonify({'token': token})
-print("try")
+
 
 @app.route("/user", methods=["GET"])
 def user_view():
@@ -145,8 +146,7 @@ def add_product():
         'price': new_product.price
     }), 201
 
-
-@app.route("/shop", methods=["POST"])
+@app.route("/cart", methods=["POST"])
 def add_to_cart():
     token = request.headers.get('Authorization')
 
@@ -156,52 +156,110 @@ def add_to_cart():
         decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
     except jwt.InvalidTokenError:
         return jsonify({'message': 'Invalid token'}), 401
-    username = decoded_token.get('customer')
-    customer = Customer.query.filter_by(username=username).first()
 
+    username = decoded_token.get('customer')
+    print(username)
+    customer = Customer.query.filter_by(username=username).first()
+    customer_id = customer.id
     if not customer:
         return jsonify({'message': 'Invalid user'}), 401
+
     data = request.get_json()
+    product_id = data.get('product_id')  # Changed 'product' to 'products'
+    quantity = data.get('quantity')
 
-    customer_id = customer.id
-    print(customer_id, "--------------------------------------")
-    #products = data.get('products')  # Changed 'product' to 'products'
+    if quantity == 0:
+        print("success")
+
+    product = Product.query.filter_by(id=product_id).first()
+    if not product:
+        return jsonify({'message': 'we dont have it. come tomorrow!'}), 401
+    previous_order = Cart.query.filter_by(id=product_id).filter_by(customer_id=customer_id).first()
+
+    if previous_order:
+        if quantity == 0:
+            db.session.delete(previous_order)
+            db.session.commit()
+            return jsonify({
+                'Message': 'Product deleted.Its gone.',
+            }), 201
+
+        previous_order.price = product.price * quantity
+        previous_order.quantity = quantity
+        return jsonify({
+            'Message': 'Product details updated Mr. Adams',
+            'customer_id': customer.id,
+            'Product_Id': previous_order.product_id,
+            'Product_Name': product.name,
+            'Quantity': previous_order.quantity,
+            'price': previous_order.price
+        }), 201
 
 
-    #chatGPT begin
-    product_ids = data.get('products')  # Changed 'product' to 'products'
-
-    # Convert the list of product IDs into a list of Product objects
-    products = Product.query.filter(Product.id.in_(product_ids)).all()
-
-    if not products:
-        return jsonify({'message': 'No products found'}), 404
-
-    #ChatGPT end
+    else:
+        price = product.price * quantity
 
 
 
-    new_cart = Order(customer_id=customer_id, products=products)
 
-    db.session.add(new_cart)
+
+
+
+
+
+    cart = Cart(customer_id=customer_id, product_id=product_id, quantity=quantity, price=price)
+    #existing_order = Order.query.filter_by(customer_id=customer_id).first()
+
+    db.session.add(cart)
     db.session.commit()
 
-    product_dicts = [
-        {
-            'id': product.id,
-            'name': product.name,
-            'description': product.description,
-            'price': product.price
-        }
-        for product in new_cart.products
-    ]
-
-
     return jsonify({
-        'id': new_cart.id,
-        'customer_id': new_cart.customer_id,
-        'product': product_dicts
+        'customer_id': customer.id,
+        'Product_Id': cart.product_id,
+        'Product_Name': product.name,
+        'Quantity': cart.quantity,
+        'price': cart.price
     }), 201
+
+@app.route("/cart", methods=["GET"])
+def cart_view():
+    token = request.headers.get('Authorization')
+
+    if not token:
+        return jsonify({'message': 'You need to sign in to see your Cart bruh'}), 401
+    try:
+        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    username = decoded_token.get('customer')
+    print(username)
+    customer = Customer.query.filter_by(username=username).first()
+    customer_id = customer.id
+
+
+    #carts = Cart.query.all()
+    carts = Cart.query.filter_by(customer_id=customer_id).all()
+
+
+
+
+
+
+
+    cart_list = []
+    for cart in carts:
+        cart_dict = {
+
+            'name': cart.product_id,
+            'count': cart.quantity,
+            'price': cart.price,
+
+
+        }
+        cart_list.append(cart_dict)
+
+    return jsonify({"customer_id": customer_id, 'cart_items': cart_list })
 
 
 if __name__ == "__main__":

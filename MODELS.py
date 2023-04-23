@@ -23,7 +23,7 @@ order_product = db.Table('order_product',
                          db.Column('order_id', db.Integer, db.ForeignKey('order.id'), primary_key=True),
                          db.Column('product_id', db.Integer, db.ForeignKey('product.id'), primary_key=True)
                          )
-
+#db.Column('product_quantity', db.Integer, db.ForeignKey('order.quantity'), primary_key=True)
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -32,6 +32,17 @@ class Order(db.Model):
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
     # when you want to know products on the order. Ask more about this!!!!!!!!!!!!!!!!
     products = db.relationship('Product', secondary=order_product)
+    quantity = db.Column(db.Integer, default=1)
+    bought = db.Column(db.Boolean, nullable=False, default=False)
+
+class Cart(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
+    quantity = db.Column(db.Integer, default=1)
+    bought = db.Column(db.Boolean, nullable=False, default=False)
+    price = db.Column(db.Integer, default=1)
+
 
 
 class Product(db.Model):
