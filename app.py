@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, render_template, request, redirect, make_response
 from flask_sqlalchemy import SQLAlchemy
-from MODELS import Customer, Product, db, Order, Cart
+from MODELS import Customer, Product, db, Cart, Order
+
 
 import jwt
 
@@ -14,7 +15,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'tugrul'
 
 db.init_app(app)
-
 
 # db.init_app(app) #-- this is the same, but with multiple py files
 
@@ -146,6 +146,7 @@ def add_product():
         'price': new_product.price
     }), 201
 
+
 @app.route("/cart", methods=["POST"])
 def add_to_cart():
     token = request.headers.get('Authorization')
@@ -199,16 +200,8 @@ def add_to_cart():
     else:
         price = product.price * quantity
 
-
-
-
-
-
-
-
-
     cart = Cart(customer_id=customer_id, product_id=product_id, quantity=quantity, price=price)
-    #existing_order = Order.query.filter_by(customer_id=customer_id).first()
+    # existing_order = Order.query.filter_by(customer_id=customer_id).first()
 
     db.session.add(cart)
     db.session.commit()
@@ -220,6 +213,7 @@ def add_to_cart():
         'Quantity': cart.quantity,
         'price': cart.price
     }), 201
+
 
 @app.route("/cart", methods=["GET"])
 def cart_view():
@@ -237,15 +231,8 @@ def cart_view():
     customer = Customer.query.filter_by(username=username).first()
     customer_id = customer.id
 
-
-    #carts = Cart.query.all()
+    # carts = Cart.query.all()
     carts = Cart.query.filter_by(customer_id=customer_id).all()
-
-
-
-
-
-
 
     cart_list = []
     for cart in carts:
@@ -255,11 +242,104 @@ def cart_view():
             'count': cart.quantity,
             'price': cart.price,
 
-
         }
         cart_list.append(cart_dict)
 
-    return jsonify({"customer_id": customer_id, 'cart_items': cart_list })
+    return jsonify({"customer_id": customer_id, 'cart_items': cart_list})
+
+
+@app.route("/order", methods=["POST"])
+def order_give():
+    token = request.headers.get('Authorization')
+
+    if not token:
+        return jsonify({'message': 'You need to sign in to see your Cart bruh'}), 401
+    try:
+        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    username = decoded_token.get('customer')
+
+    customer = Customer.query.filter_by(username=username).first()
+    customer_id = customer.id
+    if not customer:
+        return jsonify({'message': 'Invalid user'}), 401
+
+    carts = Cart.query.filter_by(customer_id=customer_id).all()
+    if not carts:
+        return jsonify({'message': 'go buy some stuff first, empty here!'}), 401
+
+    cart_list = []
+    total_price = 0
+    for cart in carts:
+        cart_dict = {
+
+            'name': cart.product_id,
+            'count': cart.quantity,
+            'price': cart.price,
+
+        }
+        total_price = total_price + cart_dict['price']
+        cart_list.append(cart_dict)
+
+    print(total_price)
+
+    data = request.get_json()
+    confirm = data.get('Do_U_Confirm? Y/N')  # Changed 'product' to 'products'
+    if confirm != "Y":
+        return jsonify({'message': 'DENIED! buy it later then...'}), 401
+
+    order = Order(customer_id=customer_id, order_summary=cart_list, total_price=total_price)
+
+    db.session.add(order)
+    db.session.commit()
+
+    for cart in carts:
+        db.session.delete(cart)
+        db.session.commit()
+
+    return jsonify({
+        'Message': 'Order Succeeded!',
+        'customer_id': customer.id,
+        'Order_Details': cart_list,
+        'Total': total_price,
+
+    }), 201
+
+    return jsonify({"customer_id": customer_id, 'cart_items': cart_list})
+
+@app.route("/order", methods=["GET"])
+def order_view():
+    token = request.headers.get('Authorization')
+
+    if not token:
+        return jsonify({'message': 'You need to sign in to see your Cart bruh'}), 401
+    try:
+        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+    except jwt.InvalidTokenError:
+        return jsonify({'message': 'Invalid token'}), 401
+
+    username = decoded_token.get('customer')
+    print(username)
+    customer = Customer.query.filter_by(username=username).first()
+    customer_id = customer.id
+
+    # carts = Cart.query.all()
+    orders = Order.query.filter_by(customer_id=customer_id).all()
+
+    order_list = []
+    for order in orders:
+        order_dict = {
+
+            'Date': order.order_date,
+            'Order_Details': order.order_summary,
+            'price': order.total_price,
+
+        }
+        order_list.append(order_dict)
+
+    return jsonify({"customer_id": customer_id, 'Previous orders': order_list})
 
 
 if __name__ == "__main__":

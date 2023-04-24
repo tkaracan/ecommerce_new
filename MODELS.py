@@ -1,5 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
+from sqlalchemy.dialects.postgresql import JSONB
 
 db = SQLAlchemy()
 
@@ -25,15 +26,15 @@ order_product = db.Table('order_product',
                          )
 #db.Column('product_quantity', db.Integer, db.ForeignKey('order.quantity'), primary_key=True)
 
-class Order(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    order_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    # ForeignKey means this column is coming from another table. name of the table should be lowercase of the class name
-    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
-    # when you want to know products on the order. Ask more about this!!!!!!!!!!!!!!!!
-    products = db.relationship('Product', secondary=order_product)
-    quantity = db.Column(db.Integer, default=1)
-    bought = db.Column(db.Boolean, nullable=False, default=False)
+# class Order(db.Model):
+#     id = db.Column(db.Integer, primary_key=True)
+#     order_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+#     # ForeignKey means this column is coming from another table. name of the table should be lowercase of the class name
+#     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
+#     # when you want to know products on the order. Ask more about this!!!!!!!!!!!!!!!!
+#     products = db.relationship('Product', secondary=order_product)
+#     quantity = db.Column(db.Integer, default=1)
+#     bought = db.Column(db.Boolean, nullable=False, default=False)
 
 class Cart(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -42,6 +43,13 @@ class Cart(db.Model):
     quantity = db.Column(db.Integer, default=1)
     bought = db.Column(db.Boolean, nullable=False, default=False)
     price = db.Column(db.Integer, default=1)
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
+    order_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    order_summary = db.Column(JSONB)
+    total_price = db.Column(db.Integer)
 
 
 
