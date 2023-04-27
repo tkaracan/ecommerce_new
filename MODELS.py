@@ -24,17 +24,7 @@ order_product = db.Table('order_product',
                          db.Column('order_id', db.Integer, db.ForeignKey('order.id'), primary_key=True),
                          db.Column('product_id', db.Integer, db.ForeignKey('product.id'), primary_key=True)
                          )
-#db.Column('product_quantity', db.Integer, db.ForeignKey('order.quantity'), primary_key=True)
 
-# class Order(db.Model):
-#     id = db.Column(db.Integer, primary_key=True)
-#     order_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-#     # ForeignKey means this column is coming from another table. name of the table should be lowercase of the class name
-#     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'), nullable=False)
-#     # when you want to know products on the order. Ask more about this!!!!!!!!!!!!!!!!
-#     products = db.relationship('Product', secondary=order_product)
-#     quantity = db.Column(db.Integer, default=1)
-#     bought = db.Column(db.Boolean, nullable=False, default=False)
 
 class Cart(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -43,6 +33,8 @@ class Cart(db.Model):
     quantity = db.Column(db.Integer, default=1)
     bought = db.Column(db.Boolean, nullable=False, default=False)
     price = db.Column(db.Integer, default=1)
+    def __repr__(self):
+        return f'<Cart {self.id}>'
 
 class Order(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -51,6 +43,10 @@ class Order(db.Model):
     order_summary = db.Column(JSONB)
     total_price = db.Column(db.Integer)
 
+    def __repr__(self):
+        return f'<Order {self.id}>'
+
+
 
 
 class Product(db.Model):
@@ -58,3 +54,6 @@ class Product(db.Model):
     name = db.Column(db.String(50), nullable=False, unique=True)  # (50) --> max 50 character str
     description = db.Column(db.String(140))  # (50) --> max 50 character str
     price = db.Column(db.Integer, nullable=False)  # nullable = true means you cant leave it blank
+
+    def __repr__(self):
+        return f'<Product {self.name}>'

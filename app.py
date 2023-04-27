@@ -1,345 +1,478 @@
-from flask import Flask, jsonify, render_template, request, redirect, make_response
-from flask_sqlalchemy import SQLAlchemy
+from flask import Flask, jsonify, request,json
+from flask_restx import Api, Resource, fields
+
+from flask_cors import CORS
 from MODELS import Customer, Product, db, Cart, Order
-
-
 import jwt
 
-# create a new instance of the flask class. create a flask object
 app = Flask(__name__)
-# put configuration to the app. -----------here: /// means file in the current directory
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dataCAN.sqlite3'
-# surpress trivial warnings in terminal
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-# for login auth token
 app.config['SECRET_KEY'] = 'tugrul'
+authorizations = {
+    'apikey': {
+        'type': 'apiKey',
+        'in': 'header',
+        'name': 'Authorization'
+    }
+}
 
 db.init_app(app)
 
-# db.init_app(app) #-- this is the same, but with multiple py files
+api = Api(app, version='1.0', title='Noodle Store API', description='A Noodle Store API', doc='/swagger/',authorizations=authorizations, security='apikey')
+cors = CORS(app)
 
-# now create MODELS like roles
-# from each class you need to inherit from Model
 with app.app_context():
     db.create_all()
 
+ns_customer = api.namespace('customer', description='Customer operations')
+ns_product = api.namespace('product', description='Product operations')
+ns_cart = api.namespace('cart', description='Cart operations')
+ns_order = api.namespace('order', description='Order operations')
 
-@app.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    username = data.get('username', None)
-    password = data.get('password', None)
-
-    if not username or not password:
-        return jsonify({'message': 'Missing username or password'}), 400
-
-    customer = Customer.query.filter_by(username=username).first()
-    if not customer or customer.password != password:
-        return jsonify({'message': 'Wrong Password or Username'}), 401
-
-    token = jwt.encode({'customer': username}, app.config['SECRET_KEY'], algorithm='HS256')
-    return jsonify({'token': token})
+# Define models for Swagger documentation
+login_model = api.model('Login', {
+    'username': fields.String(required=True, description='Username'),
+    'password': fields.String(required=True, description='Password')
+})
 
 
-@app.route("/user", methods=["GET"])
-def user_view():
-    customers = Customer.query.all()
-    customer_list = []
-    for customer in customers:
-        customer_dict = {
-            'id': customer.id,
-            'username': customer.username,
-            'is_admin': customer.is_admin,
-            'order_count': len(customer.orders)
-        }
-        customer_list.append(customer_dict)
 
-    return jsonify(customer_list)
+customer_model = api.model('Customer', {
+    'id': fields.Integer,
+    'username': fields.String,
+    'is_admin': fields.Boolean,
+    'order_count': fields.Integer
+})
+
+new_customer_model = api.model('NewCustomer', {
+    'username': fields.String(required=True),
+    'password': fields.String(required=True),
+    'is_admin': fields.Boolean(required=False, default=False)
+})
+
+product_model = api.model('Product', {
+    'id': fields.Integer(readOnly=True),
+    'name': fields.String(required=True),
+    'price': fields.Float(required=True)
+})
+
+product_detail_model = api.model('ProductDetail', {
+    'id': fields.Integer(readOnly=True),
+    'name': fields.String(required=True),
+    'price': fields.Float(required=True),
+    'description': fields.String()
+})
+
+add_product_model = api.model('AddProduct', {
+    'name': fields.String(required=True),
+    'price': fields.Float(required=True),
+    'description': fields.String(required=False)
+})
+
+add_cart_model = api.model('AddToCart', {
+    'product_id': fields.Integer(required=True),
+    'quantity': fields.Integer(required=True)
+})
+
+order_confirm_model = api.model('OrderConfirmation', {
+    'Do_U_Confirm? Y/N': fields.String(required=True, description='Confirm the order')
+})
+cart_model = api.model('Cart', {
+    'name': fields.Integer(description='Product ID'),
+    'count': fields.Integer(description='Quantity'),
+    'price': fields.Float(description='Price')
+})
+
+order_list_model = api.model('OrderList', {
+    'Date': fields.DateTime(description='Order date'),
+    'Order_Details': fields.List(fields.Nested(cart_model), description='Order details'),
+    'price': fields.Float(description='Total price of the order')
+})
 
 
-@app.route("/user", methods=["POST"])
-def create_user():
-    # Parse the JSON payload from the request
-    data = request.get_json()
-    # Get the values for the new customer from the payload
-    username = data.get('username')
-    password = data.get('password')
-    is_admin = data.get('is_admin', False)  # Optional, default to False if not provided
-    # Create a new Customer object
-    new_customer = Customer(username=username, password=password, is_admin=is_admin)
-    # Add the new customer to the database
-    db.session.add(new_customer)
-    db.session.commit()
-    # Return a JSON representation of the new customer with a 201 (Created) status code
-    return jsonify({
-        'id': new_customer.id,
-        'username': new_customer.username,
-        'is_admin': new_customer.is_admin,
-        'order_count': 0  # New customers have no orders yet
-    }), 201
 
 
-@app.route("/product", methods=["GET"])
-def product_view():
-    products = Product.query.all()
-    product_list = []
-    for product in products:
-        customer_dict = {
-            'id': product.id,
-            'name': product.name,
-            'price': product.price,
-
-        }
-        product_list.append(customer_dict)
-
-    return jsonify(product_list)
 
 
-@app.route("/product/<product_id>", methods=["GET"])
-def product_detail(product_id):
-    product = Product.query.filter_by(id=product_id).first()
 
-    if not product:
-        return jsonify({'error': 'Product not found'}), 404
-
-    return jsonify({
-        'id': product.id,
-        'name': product.name,
-        'price': product.price,
-        'description': product.description
+@api.route('/login')
+class LoginResource(Resource):
+    @api.doc('login', responses={
+        200: 'Login successful',
+        400: 'Missing username or password',
+        401: 'Wrong password or username'
     })
+    @api.expect(login_model)
+    def post(self):
+        data = request.get_json()
+        username = data.get('username', None)
+        password = data.get('password', None)
+
+        if not username or not password:
+            return {'message': 'Missing username or password'}, 400
+
+        customer = Customer.query.filter_by(username=username).first()
+        if not customer or customer.password != password:
+            return {'message': 'Wrong Password or Username'}, 401
+
+        token = jwt.encode({'customer': username}, app.config['SECRET_KEY'], algorithm='HS256')
+        return {'token': token}
 
 
-@app.route("/product", methods=["POST"])
-def add_product():
-    token = request.headers.get('Authorization')
 
-    if not token:
-        return jsonify({'message': 'No token provided'}), 401
-    try:
-        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
 
-    username = decoded_token.get('customer')  # bu neden str?
-    customer = Customer.query.filter_by(username=username).first()
+@ns_customer.route('/user')
+class CustomerResource(Resource):
+    @api.doc(responses={200: 'Success', 400: 'Bad Request'})
+    @ns_customer.marshal_list_with(customer_model)
+    def get(self):
+        """
+        Get a list of all customers
+        """
+        customers = Customer.query.all()
+        customer_list = []
+        for customer in customers:
+            customer_dict = {
+                'id': customer.id,
+                'username': customer.username,
+                'is_admin': customer.is_admin,
+                'order_count': len(customer.orders)
+            }
+            customer_list.append(customer_dict)
 
-    if not customer:
-        return jsonify({'message': 'Invalid user'}), 401
-    if customer.is_admin == False:
-        return ("You cant add products here, go away")
-    else:
+        return customer_list
+
+
+
+@ns_customer.route('/')
+class CustomerResource(Resource):
+    # ... The existing get method ...
+
+    @api.doc(responses={201: 'Created', 400: 'Bad Request'})
+    @ns_customer.expect(new_customer_model, validate=True)
+    @ns_customer.marshal_with(customer_model, code=201)
+    def post(self):
+        """
+        Create a new customer
+        """
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        is_admin = data.get('is_admin', False)
+
+        new_customer = Customer(username=username, password=password, is_admin=is_admin)
+        db.session.add(new_customer)
+        db.session.commit()
+
+        return {
+            'id': new_customer.id,
+            'username': new_customer.username,
+            'is_admin': new_customer.is_admin,
+            'order_count': 0
+        }, 201
+
+
+
+@ns_product.route('/view_all')
+class ProductResource(Resource):
+    @api.doc(responses={200: 'OK', 400: 'Bad Request'})
+    @ns_product.marshal_list_with(product_model)
+    def get(self):
+        """
+        Retrieve all products
+        """
+        products = Product.query.all()
+        product_list = []
+        for product in products:
+            product_dict = {
+                'id': product.id,
+                'name': product.name,
+                'price': product.price
+            }
+            product_list.append(product_dict)
+
+        return product_list
+
+
+
+@ns_product.route('/<int:product_id>')
+@api.doc(params={'product_id': 'The product ID'})
+class ProductDetailResource(Resource):
+    @api.doc(responses={200: 'OK', 404: 'Not Found'})
+    @api.marshal_with(product_detail_model)
+    def get(self, product_id):
+        """
+        Retrieve a product by its ID
+        """
+        product = Product.query.filter_by(id=product_id).first()
+
+        if not product:
+            api.abort(404, "Product not found")
+
+        return product
+
+
+@ns_product.route('/')
+class AddProductResource(Resource):
+    @api.doc('add_product', responses={
+        201: 'Product added successfully',
+        401: 'Unauthorized access'
+    })
+    @api.expect(add_product_model)
+    def post(self):
+        token = request.headers.get('Authorization')
+
+        if not token:
+            return {'message': 'No token provided'}, 401
+        try:
+            decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except jwt.InvalidTokenError:
+            return {'message': 'Invalid token'}, 401
+
+        username = decoded_token.get('customer')
+        customer = Customer.query.filter_by(username=username).first()
+
+        if not customer:
+            return {'message': 'Invalid user'}, 401
+        if customer.is_admin == False:
+            return ("You cant add products here, go away")
+        else:
+            try:
+                data = request.get_json()
+                name = data.get('name')
+                price = data.get('price')
+                description = data.get('description')
+                new_product = Product(name=name, price=price, description=description)
+
+                db.session.add(new_product)
+                db.session.commit()
+            except:
+                return {"message": "we already have that lan"}
+
+        return {
+            'id': new_product.id,
+            'name': new_product.name,
+            'description': new_product.description,
+            'price': new_product.price
+        }, 201
+
+
+@ns_cart.route('/add_to_cart')
+class AddToCartResource(Resource):
+    @api.doc('add_to_cart', responses={
+        201: 'Cart updated successfully',
+        401: 'Unauthorized access'
+    })
+    @api.expect(add_cart_model)
+    def post(self):
+        token = request.headers.get('Authorization')
+
+        if not token:
+            return {'message': 'You need to sign in to buy stuff dude'}, 401
+        try:
+            decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except jwt.InvalidTokenError:
+            return {'message': 'Invalid token'}, 401
+
+        username = decoded_token.get('customer')
+        print(username)
+        customer = Customer.query.filter_by(username=username).first()
+        if not customer:
+            return {'message': 'Invalid user'}, 401
+        customer_id = customer.id
 
         data = request.get_json()
-        name = data.get('name')
-        price = data.get('price')
-        description = data.get('description')
-        new_product = Product(name=name, price=price, description=description)
+        product_id = data.get('product_id')
+        quantity = data.get('quantity')
 
-        db.session.add(new_product)
-        db.session.commit()
-
-    return jsonify({
-        'id': new_product.id,
-        'name': new_product.name,
-        'description': new_product.description,
-        'price': new_product.price
-    }), 201
-
-
-@app.route("/cart", methods=["POST"])
-def add_to_cart():
-    token = request.headers.get('Authorization')
-
-    if not token:
-        return jsonify({'message': 'You need to sign in to buy stuff dude'}), 401
-    try:
-        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
-
-    username = decoded_token.get('customer')
-    print(username)
-    customer = Customer.query.filter_by(username=username).first()
-    customer_id = customer.id
-    if not customer:
-        return jsonify({'message': 'Invalid user'}), 401
-
-    data = request.get_json()
-    product_id = data.get('product_id')  # Changed 'product' to 'products'
-    quantity = data.get('quantity')
-
-    if quantity == 0:
-        print("success")
-
-    product = Product.query.filter_by(id=product_id).first()
-    if not product:
-        return jsonify({'message': 'we dont have it. come tomorrow!'}), 401
-    previous_order = Cart.query.filter_by(id=product_id).filter_by(customer_id=customer_id).first()
-
-    if previous_order:
         if quantity == 0:
-            db.session.delete(previous_order)
-            db.session.commit()
-            return jsonify({
-                'Message': 'Product deleted.Its gone.',
-            }), 201
+            print("success")
 
-        previous_order.price = product.price * quantity
-        previous_order.quantity = quantity
-        return jsonify({
-            'Message': 'Product details updated Mr. Adams',
-            'customer_id': customer.id,
-            'Product_Id': previous_order.product_id,
-            'Product_Name': product.name,
-            'Quantity': previous_order.quantity,
-            'price': previous_order.price
-        }), 201
+        product = Product.query.filter_by(id=product_id).first()
+        if not product:
+            return {'message': 'we dont have it. come tomorrow!'}, 401
+        previous_order = Cart.query.filter_by(id=product_id).filter_by(customer_id=customer_id).first()
 
+        if previous_order:
+            if quantity == 0:
+                db.session.delete(previous_order)
+                db.session.commit()
+                return {
+                    'Message': 'Product deleted. Its gone.',
+                }, 201
 
-    else:
-        price = product.price * quantity
+            previous_order.price = product.price * quantity
+            previous_order.quantity = quantity
+            return {
+                'Message': 'Product details updated Mr. Adams',
+                'customer_id': customer.id,
+                'Product_Id': previous_order.product_id,
+                'Product_Name': product.name,
+                'Quantity': previous_order.quantity,
+                'price': previous_order.price
+            }, 201
 
-    cart = Cart(customer_id=customer_id, product_id=product_id, quantity=quantity, price=price)
-    # existing_order = Order.query.filter_by(customer_id=customer_id).first()
+        else:
+            price = product.price * quantity
 
-    db.session.add(cart)
-    db.session.commit()
+        cart = Cart(customer_id=customer_id, product_id=product_id, quantity=quantity, price=price)
 
-    return jsonify({
-        'customer_id': customer.id,
-        'Product_Id': cart.product_id,
-        'Product_Name': product.name,
-        'Quantity': cart.quantity,
-        'price': cart.price
-    }), 201
-
-
-@app.route("/cart", methods=["GET"])
-def cart_view():
-    token = request.headers.get('Authorization')
-
-    if not token:
-        return jsonify({'message': 'You need to sign in to see your Cart bruh'}), 401
-    try:
-        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
-
-    username = decoded_token.get('customer')
-    print(username)
-    customer = Customer.query.filter_by(username=username).first()
-    customer_id = customer.id
-
-    # carts = Cart.query.all()
-    carts = Cart.query.filter_by(customer_id=customer_id).all()
-
-    cart_list = []
-    for cart in carts:
-        cart_dict = {
-
-            'name': cart.product_id,
-            'count': cart.quantity,
-            'price': cart.price,
-
-        }
-        cart_list.append(cart_dict)
-
-    return jsonify({"customer_id": customer_id, 'cart_items': cart_list})
-
-
-@app.route("/order", methods=["POST"])
-def order_give():
-    token = request.headers.get('Authorization')
-
-    if not token:
-        return jsonify({'message': 'You need to sign in to see your Cart bruh'}), 401
-    try:
-        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
-
-    username = decoded_token.get('customer')
-
-    customer = Customer.query.filter_by(username=username).first()
-    customer_id = customer.id
-    if not customer:
-        return jsonify({'message': 'Invalid user'}), 401
-
-    carts = Cart.query.filter_by(customer_id=customer_id).all()
-    if not carts:
-        return jsonify({'message': 'go buy some stuff first, empty here!'}), 401
-
-    cart_list = []
-    total_price = 0
-    for cart in carts:
-        cart_dict = {
-
-            'name': cart.product_id,
-            'count': cart.quantity,
-            'price': cart.price,
-
-        }
-        total_price = total_price + cart_dict['price']
-        cart_list.append(cart_dict)
-
-    print(total_price)
-
-    data = request.get_json()
-    confirm = data.get('Do_U_Confirm? Y/N')  # Changed 'product' to 'products'
-    if confirm != "Y":
-        return jsonify({'message': 'DENIED! buy it later then...'}), 401
-
-    order = Order(customer_id=customer_id, order_summary=cart_list, total_price=total_price)
-
-    db.session.add(order)
-    db.session.commit()
-
-    for cart in carts:
-        db.session.delete(cart)
+        db.session.add(cart)
         db.session.commit()
 
-    return jsonify({
-        'Message': 'Order Succeeded!',
-        'customer_id': customer.id,
-        'Order_Details': cart_list,
-        'Total': total_price,
+        return {
+            'customer_id': customer.id,
+            'Product_Id': cart.product_id,
+            'Product_Name': product.name,
+            'Quantity': cart.quantity,
+            'price': cart.price
+        }, 201
 
-    }), 201
+@ns_cart.route('/view_cart')
+class CartViewResource(Resource):
+    @api.doc('view_cart', responses={
+        200: 'Cart fetched successfully',
+        401: 'Unauthorized access'
+    })
+    def get(self):
+        token = request.headers.get('Authorization')
 
-    return jsonify({"customer_id": customer_id, 'cart_items': cart_list})
+        if not token:
+            return {'message': 'You need to sign in to see your Cart bruh'}, 401
+        try:
+            decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except jwt.InvalidTokenError:
+            return {'message': 'Invalid token'}, 401
 
-@app.route("/order", methods=["GET"])
-def order_view():
-    token = request.headers.get('Authorization')
+        username = decoded_token.get('customer')
+        customer = Customer.query.filter_by(username=username).first()
+        customer_id = customer.id
 
-    if not token:
-        return jsonify({'message': 'You need to sign in to see your Cart bruh'}), 401
-    try:
-        decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
+        carts = Cart.query.filter_by(customer_id=customer_id).all()
 
-    username = decoded_token.get('customer')
-    print(username)
-    customer = Customer.query.filter_by(username=username).first()
-    customer_id = customer.id
+        cart_list = []
+        for cart in carts:
+            cart_dict = {
+                'name': cart.product_id,
+                'count': cart.quantity,
+                'price': cart.price,
+            }
+            cart_list.append(cart_dict)
 
-    # carts = Cart.query.all()
-    orders = Order.query.filter_by(customer_id=customer_id).all()
+        return {"customer_id": customer_id, 'cart_items': cart_list}
 
-    order_list = []
-    for order in orders:
-        order_dict = {
+@ns_order.route('/give_order')
+class OrderResource(Resource):
+    @api.doc('create_order', responses={
+        200: 'Order succeeded',
+        401: 'Unauthorized access'
+    })
+    @api.expect(order_confirm_model)
+    def post(self):
+        token = request.headers.get('Authorization')
 
-            'Date': order.order_date,
-            'Order_Details': order.order_summary,
-            'price': order.total_price,
+        if not token:
+            return {'message': 'You need to sign in to see your Cart bruh'}, 401
+        try:
+            decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except jwt.InvalidTokenError:
+            return {'message': 'Invalid token'}, 401
 
-        }
-        order_list.append(order_dict)
+        username = decoded_token.get('customer')
 
-    return jsonify({"customer_id": customer_id, 'Previous orders': order_list})
+        customer = Customer.query.filter_by(username=username).first()
+        customer_id = customer.id
+        if not customer:
+            return {'message': 'Invalid user'}, 401
+
+        carts = Cart.query.filter_by(customer_id=customer_id).all()
+        if not carts:
+            return {'message': 'go buy some stuff first, empty here!'}, 401
+
+        cart_list = []
+        total_price = 0
+        for cart in carts:
+            cart_dict = {
+
+                'name': cart.product_id,
+                'count': cart.quantity,
+                'price': cart.price,
+
+            }
+            total_price = total_price + cart_dict['price']
+            cart_list.append(cart_dict)
+
+        print(total_price)
+
+        data = request.get_json()
+        confirm = data.get('Do_U_Confirm? Y/N')  # Changed 'product' to 'products'
+        if confirm != "Y":
+            return {'message': 'DENIED! buy it later then...'}, 401
+
+
+        order = Order(customer_id=customer_id, order_summary=json.dumps(cart_list), total_price=total_price)
+
+        db.session.add(order)
+        db.session.commit()
+
+        for cart in carts:
+            db.session.delete(cart)
+            db.session.commit()
+
+        print(cart_list)
+
+        return {
+            'Message': 'Order Succeeded!',
+            'customer_id': customer.id,
+            'Order_Details': cart_list,
+            'Total': total_price,
+        }, 201
+
+
+@ns_order.route('/order_history')
+class OrderResource(Resource):
+    @api.doc('list_orders', responses={
+        200: 'List of orders',
+        401: 'Unauthorized access'
+    })
+    #@api.marshal_list_with(order_list_model)
+    def get(self):
+        token = request.headers.get('Authorization')
+
+        if not token:
+            return {'message': 'You need to sign in to see your Cart bruh'}, 401
+        try:
+            decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except jwt.InvalidTokenError:
+            return {'message': 'Invalid token'}, 401
+
+        username = decoded_token.get('customer')
+        customer = Customer.query.filter_by(username=username).first()
+        customer_id = customer.id
+        print(customer_id)
+
+        orders = Order.query.filter_by(customer_id=customer_id).all()
+        if not orders:
+            return {'message': 'go buy some stuff first, empty here!'}, 401
+        # print("hello",orders)
+        #print("a")
+        # print("what")
+
+        order_list = []
+        for order in orders:
+            order_dict = {
+                'Date': str(order.order_date),
+                'Order_Details': str(order.order_summary),
+                'price': str(order.total_price)
+            }
+
+            order_list.append(order_dict)
+
+
+
+        return {"customer_id": customer_id,
+                'Previous orders': order_list}
 
 
 if __name__ == "__main__":
