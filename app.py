@@ -1,5 +1,5 @@
 from flask import Flask, jsonify, request,json
-from flask_restx import Api, Resource, fields
+from flask_restx import Api, Resource, fields, mask
 
 from flask_cors import CORS
 from MODELS import Customer, Product, db, Cart, Order
@@ -19,9 +19,11 @@ authorizations = {
 
 db.init_app(app)
 
-api = Api(app, version='1.0', title='Noodle Store API', description='A Noodle Store API', doc='/swagger/',authorizations=authorizations, security='apikey')
-cors = CORS(app)
 
+
+api = Api(app, version='1.0', title='Noodle Store API', description='A Noodle Store API', doc='/swagger/', authorizations=authorizations, security='apikey')
+cors = CORS(app, origins=["http://localhost:5000"])
+custom_mask = mask.Mask('*,!field_to_exclude', skip=True)
 with app.app_context():
     db.create_all()
 
@@ -85,9 +87,17 @@ cart_model = api.model('Cart', {
 })
 
 order_list_model = api.model('OrderList', {
-    'Date': fields.DateTime(description='Order date'),
-    'Order_Details': fields.List(fields.Nested(cart_model), description='Order details'),
-    'price': fields.Float(description='Total price of the order')
+    'Begin': fields.Integer(description='Start number'),
+    'End': fields.Integer(description='End number')
+})
+
+order_response_model = api.model('OrderResponse', {
+    'customer_id': fields.Integer(description='Customer ID'),
+    'Previous orders': fields.List(fields.Nested(api.model('Order', {
+        'Date': fields.String(description='Order date'),
+        'Order_Details': fields.String(description='Order summary'),
+        'price': fields.String(description='Total price')
+    })), description='List of previous orders')
 })
 
 
@@ -124,12 +134,26 @@ class LoginResource(Resource):
 
 @ns_customer.route('/user')
 class CustomerResource(Resource):
-    @api.doc(responses={200: 'Success', 400: 'Bad Request'})
-    @ns_customer.marshal_list_with(customer_model)
+    @api.doc(responses={
+        200: 'Success',
+        400: 'Bad Request',
+        401: 'Unauthorized access'
+    })
+    @ns_customer.marshal_list_with(customer_model, mask=custom_mask)
     def get(self):
         """
         Get a list of all customers
         """
+
+        token = request.headers.get('Authorization')
+
+        if not token:
+            return {'message': 'No token provided'}, 401
+        try:
+            decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
+        except jwt.InvalidTokenError:
+            return {'message': 'Invalid token'}, 401
+
         customers = Customer.query.all()
         customer_list = []
         for customer in customers:
@@ -145,11 +169,16 @@ class CustomerResource(Resource):
 
 
 
+
 @ns_customer.route('/')
 class CustomerResource(Resource):
     # ... The existing get method ...
 
-    @api.doc(responses={201: 'Created', 400: 'Bad Request'})
+    @api.doc(responses={
+        201: 'Created',
+        400: 'Bad Request',
+        401: 'Unauthorized access'
+    })
     @ns_customer.expect(new_customer_model, validate=True)
     @ns_customer.marshal_with(customer_model, code=201)
     def post(self):
@@ -174,9 +203,15 @@ class CustomerResource(Resource):
 
 
 
+
 @ns_product.route('/view_all')
 class ProductResource(Resource):
-    @api.doc(responses={200: 'OK', 400: 'Bad Request'})
+    @api.doc(responses={
+        201: 'Created',
+        400: 'Bad Request',
+        401: 'Unauthorized access'
+    })
+
     @ns_product.marshal_list_with(product_model)
     def get(self):
         """
@@ -365,15 +400,15 @@ class CartViewResource(Resource):
 @ns_order.route('/give_order')
 class OrderResource(Resource):
     @api.doc('create_order', responses={
-        200: 'Order succeeded',
+        201: 'Order succeeded',
         401: 'Unauthorized access'
     })
-    @api.expect(order_confirm_model)
-    def post(self):
+    # @api.expect(order_confirm_model)
+    def get(self):
         token = request.headers.get('Authorization')
 
         if not token:
-            return {'message': 'You need to sign in to see your Cart bruh'}, 401
+            return {'message': 'You need to sign in to buy sheet'}, 401
         try:
             decoded_token = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
         except jwt.InvalidTokenError:
@@ -405,10 +440,10 @@ class OrderResource(Resource):
 
         print(total_price)
 
-        data = request.get_json()
-        confirm = data.get('Do_U_Confirm? Y/N')  # Changed 'product' to 'products'
-        if confirm != "Y":
-            return {'message': 'DENIED! buy it later then...'}, 401
+        # data = request.get_json()
+        # confirm = data.get('Do_U_Confirm? Y/N')  # Changed 'product' to 'products'
+        # if confirm != "Y":
+        #     return {'message': 'DENIED! buy it later then...'}, 401
 
 
         order = Order(customer_id=customer_id, order_summary=json.dumps(cart_list), total_price=total_price)
@@ -436,8 +471,9 @@ class OrderResource(Resource):
         200: 'List of orders',
         401: 'Unauthorized access'
     })
+    @api.expect(order_list_model)
     #@api.marshal_list_with(order_list_model)
-    def get(self):
+    def post(self):
         token = request.headers.get('Authorization')
 
         if not token:
@@ -452,22 +488,37 @@ class OrderResource(Resource):
         customer_id = customer.id
         print(customer_id)
 
+        data = request.get_json()
+        start = data.get('Begin')
+        end = data.get('End')
+
+
+
+
+
         orders = Order.query.filter_by(customer_id=customer_id).all()
         if not orders:
             return {'message': 'go buy some stuff first, empty here!'}, 401
-        # print("hello",orders)
-        #print("a")
-        # print("what")
+
 
         order_list = []
-        for order in orders:
-            order_dict = {
-                'Date': str(order.order_date),
-                'Order_Details': str(order.order_summary),
-                'price': str(order.total_price)
-            }
+        if end == 0:
+            for order in orders[start:]:
+                order_dict = {
+                    'Date': str(order.order_date),
+                    'Order_Details': str(order.order_summary),
+                    'price': str(order.total_price)
+                }
+                order_list.append(order_dict)
+        else:
+            for order in orders[start:end]:
+                order_dict = {
+                    'Date': str(order.order_date),
+                    'Order_Details': str(order.order_summary),
+                    'price': str(order.total_price)
+                }
+                order_list.append(order_dict)
 
-            order_list.append(order_dict)
 
 
 
