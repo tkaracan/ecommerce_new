@@ -1,11 +1,11 @@
-from flask import Flask, jsonify, request,json
+from flask import Flask, request,json
 from flask_restx import Api, Resource, fields, mask
 
 from flask_cors import CORS
 from MODELS import Customer, Product, db, Cart, Order
 import jwt
 
-from customer import ns_customer
+from controllers.customer import ns_customer
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dataCAN.sqlite3'
