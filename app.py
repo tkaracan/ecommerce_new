@@ -21,7 +21,7 @@ authorizations = {
 
 db.init_app(app)
 
-
+print('hello')
 
 api = Api(app, version='1.0', title='Noodle Store API', description='A Noodle Store API', doc='/swagger/', authorizations=authorizations, security='apikey')
 api.add_namespace(ns_customer)
