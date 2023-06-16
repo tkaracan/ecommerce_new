@@ -1,10 +1,17 @@
 import jwt
 from flask import request, current_app
-from flask_restx import Resource, Api, Namespace, fields
+from flask_restx import Resource, Namespace, fields
 
 from MODELS import Customer, db
 
 ns_customer = Namespace('customer', description='Customer operations')
+
+
+# Define models for Swagger documentation
+login_model = ns_customer.model('Login', {
+    'username': fields.String(required=True, description='Username'),
+    'password': fields.String(required=True, description='Password')
+})
 
 
 customer_model = ns_customer.model('Customer', {
@@ -20,6 +27,33 @@ new_customer_model = ns_customer.model('NewCustomer', {
 })
 
 
+
+
+
+
+@ns_customer.route('/login')
+class LoginResource(Resource):
+    @ns_customer.doc('login', responses={
+        200: 'Login successful',
+        400: 'Missing username or password',
+        401: 'Wrong password or username'
+    })
+    @ns_customer.expect(login_model)
+    def post(self):
+        data = request.get_json()
+        username = data.get('username', None)
+        password = data.get('password', None)
+
+        if not username or not password:
+            return {'message': 'Missing username or password'}, 400
+
+        customer = Customer.query.filter_by(username=username).first()
+        if not customer or customer.password != password:
+            return {'message': 'Wrong Password or Username'}, 401
+
+        token = jwt.encode({'customer': username}, current_app.config['SECRET_KEY'], algorithm='HS256')
+        return {'token': token}
+
 @ns_customer.route('/user')
 class CustomerResource(Resource):
     @ns_customer.doc(responses={
@@ -27,7 +61,7 @@ class CustomerResource(Resource):
         400: 'Bad Request',
         401: 'Unauthorized access'
     })
-    @ns_customer.marshal_list_with(customer_model)
+    # @ns_customer.marshal_list_with(customer_model)
     def get(self):
         """
         Get a list of all customers
@@ -68,7 +102,7 @@ class CustomerResource(Resource):
         401: 'Unauthorized access'
     })
     @ns_customer.expect(new_customer_model, validate=True)
-    @ns_customer.marshal_with(customer_model, code=201)
+    # @ns_customer.marshal_with(customer_model, code=201)
     def post(self):
         """
         Create a new customer
