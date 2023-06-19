@@ -2,7 +2,7 @@ from flask import Flask
 from flask_restx import Api, mask
 
 from flask_cors import CORS
-from MODELS import db
+from models import db
 
 
 from config.config import GlobalConfig
@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = global_config.SQLALCHEMY_DATABASE_URI
 app.config['SECRET_KEY'] = global_config.JWT_SECRET_KEY
 
-print('hello')
+
 authorizations = {
     'apikey': {
         'type': 'apiKey',
