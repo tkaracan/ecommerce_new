@@ -18,7 +18,7 @@ app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = global_config.SQLALCHEMY_DATABASE_URI
 app.config['SECRET_KEY'] = global_config.JWT_SECRET_KEY
 
-
+print('hello')
 authorizations = {
     'apikey': {
         'type': 'apiKey',
