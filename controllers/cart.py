@@ -107,7 +107,7 @@ class CartViewResource(Resource):
             decoded_token = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
         except jwt.InvalidTokenError:
             return {'message': 'Invalid token'}, 401
-
+        #domain logic budur, controllerda olmasi mantikli degil.
         username = decoded_token.get('customer')
         customer = Customer.query.filter_by(username=username).first()
         customer_id = customer.id
