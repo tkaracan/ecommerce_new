@@ -1,6 +1,5 @@
 from flask import Flask
-from flask_restx import Api, mask
-
+from flask_restx import Api
 from flask_cors import CORS
 from models.models import db
 
@@ -15,6 +14,7 @@ from controllers.order import ns_order
 global_config = GlobalConfig()
 
 app = Flask(__name__)
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_DATABASE_URI'] = global_config.SQLALCHEMY_DATABASE_URI
 app.config['SECRET_KEY'] = global_config.JWT_SECRET_KEY
 
