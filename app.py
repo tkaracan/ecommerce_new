@@ -2,7 +2,7 @@ from flask import Flask
 from flask_restx import Api, mask
 
 from flask_cors import CORS
-from models import db
+from models.models import db
 
 
 from config.config import GlobalConfig

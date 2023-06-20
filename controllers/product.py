@@ -1,7 +1,8 @@
 import jwt
 from flask import request, current_app
 from flask_restx import Resource, Namespace, fields
-from models import Product, db, Customer
+from models.models import Product, db
+from models.customer import Customer
 
 ns_product = Namespace('product', description='Product operations')
 
