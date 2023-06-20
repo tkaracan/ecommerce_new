@@ -1,3 +1,4 @@
+
 from models.models import db
 
 class Customer(db.Model):
