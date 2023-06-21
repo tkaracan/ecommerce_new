@@ -2,8 +2,8 @@ import jwt
 from flask import request, current_app
 from flask_restx import Resource, Namespace, fields
 from models.models import db
-from models.customer import Customer
-from models.product import Product
+from models.model_customer import Customer
+from models.model_product import Product
 
 ns_product = Namespace('product', description='Product operations')
 
@@ -35,12 +35,16 @@ class ProductResource(Resource):
         400: 'Bad Request',
         401: 'Unauthorized access'
     })
-
-    # @ns_product.marshal_list_with(product_model)
     def get(self):
         """
         Retrieve all products
         """
+        product_list = ProductService.get_all_products()
+
+        return product_list
+class ProductService:
+    @staticmethod
+    def get_all_products():
         products = Product.query.all()
         product_list = []
         for product in products:
@@ -54,12 +58,10 @@ class ProductResource(Resource):
         return product_list
 
 
-
 @ns_product.route('/<int:product_id>')
 @ns_product.doc(params={'product_id': 'The product ID'})
 class ProductDetailResource(Resource):
     @ns_product.doc(responses={200: 'OK', 404: 'Not Found'})
-    # @ns_product.marshal_with(product_detail_model)
     def get(self, product_id):
         """
         Retrieve a product by its ID

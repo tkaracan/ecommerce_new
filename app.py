@@ -6,10 +6,10 @@ from models.models import db
 
 from config.config import GlobalConfig
 
-from controllers.customer import ns_customer
-from controllers.product import ns_product
-from controllers.cart import ns_cart
-from controllers.order import ns_order
+from controllers.cont_customer import ns_customer
+from controllers.cont_product import ns_product
+from controllers.cont_cart import ns_cart
+from controllers.cont_order import ns_order
 
 global_config = GlobalConfig()
 

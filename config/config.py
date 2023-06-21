@@ -5,7 +5,7 @@ from pathlib import Path
 
 env_path = Path('.') / 'env.env'
 load_dotenv(dotenv_path=env_path)
-print('hello')
+
 
 class GlobalConfig:
     SQLALCHEMY_DATABASE_URI = os.getenv('SQLALCHEMY_DATABASE_URI')
