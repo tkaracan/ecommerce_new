@@ -94,6 +94,8 @@ class AddProductResource(Resource):
         username = decoded_token.get('customer')
         customer = Customer.query.filter_by(username=username).first()
 
+
+
         if not customer:
             return {'message': 'Invalid user'}, 401
         if customer.is_admin == False:

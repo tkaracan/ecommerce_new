@@ -14,9 +14,7 @@ add_cart_model = ns_cart.model('AddToCart', {
     'quantity': fields.Integer(required=True)
 })
 
-order_confirm_model = ns_cart.model('OrderConfirmation', {
-    'Do_U_Confirm? Y/N': fields.String(required=True, description='Confirm the order')
-})
+
 cart_model = ns_cart.model('Cart', {
     'name': fields.Integer(description='Product ID'),
     'count': fields.Integer(description='Quantity'),
@@ -102,18 +100,26 @@ class CartViewResource(Resource):
         401: 'Unauthorized access'
     })
     def get(self):
-        token = request.headers.get('Authorization')
+        def token_check(token):
+            if not token:
+                return {'message': 'You need to sign in to see your Cart bruh'}, 401
+            try:
+                decoded_token = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
+            except jwt.InvalidTokenError:
+                return {'message': 'Invalid token'}, 401
 
-        if not token:
-            return {'message': 'You need to sign in to see your Cart bruh'}, 401
+            username = decoded_token.get('customer')
+            customer = Customer.query.filter_by(username=username).first()
+            return customer
+
+
+        customer = token_check(request.headers.get('Authorization'))
+
+
         try:
-            decoded_token = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
-        except jwt.InvalidTokenError:
-            return {'message': 'Invalid token'}, 401
-        #domain logic budur, controllerda olmasi mantikli degil.
-        username = decoded_token.get('customer')
-        customer = Customer.query.filter_by(username=username).first()
-        customer_id = customer.id
+            customer_id = customer.id
+        except:
+            return customer
 
         carts = Cart.query.filter_by(customer_id=customer_id).all()
 
