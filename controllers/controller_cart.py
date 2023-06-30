@@ -5,6 +5,8 @@ from models.models import db
 from models.model_customer import Customer
 from models.model_cart import Cart
 from models.model_product import Product
+from service.service_cart import CartService
+from service.service_token import CustomerService
 
 ns_cart = Namespace('cart', description='Cart operations')
 
@@ -93,45 +95,66 @@ class AddToCartResource(Resource):
             'price': cart.price
         }, 201
 
-@ns_cart.route('/view_cart')
-class CartViewResource(Resource):
-    @ns_cart.doc('view_cart', responses={
-        200: 'Cart fetched successfully',
-        401: 'Unauthorized access'
-    })
-    def get(self):
-        def token_check(token):
-            if not token:
+    @ns_cart.route('/view_cart')
+    class CartViewResource(Resource):
+        @ns_cart.doc('view_cart', responses={
+            200: 'Cart fetched successfully',
+            401: 'Unauthorized access'
+        })
+        def get(self):
+            token = request.headers.get('Authorization')
+            if token is None:
+                return {'message': 'You need to sign in to see your Cart my bruh'}, 401
+            customer_service = CustomerService()
+
+            customer = customer_service.validate_token(token)
+            if customer is None:
                 return {'message': 'You need to sign in to see your Cart bruh'}, 401
-            try:
-                decoded_token = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
-            except jwt.InvalidTokenError:
-                return {'message': 'Invalid token'}, 401
 
-            username = decoded_token.get('customer')
-            customer = Customer.query.filter_by(username=username).first()
-            return customer
+            cart_service = CartService()
+            cart_items = cart_service.get_cart_items(customer.id)
 
+            return {"customer_id": customer.id, 'cart_items': cart_items}
 
-        customer = token_check(request.headers.get('Authorization'))
-
-
-        try:
-            customer_id = customer.id
-        except:
-            return customer
-
-        carts = Cart.query.filter_by(customer_id=customer_id).all()
-
-        cart_list = []
-        for cart in carts:
-            cart_dict = {
-                'name': cart.product_id,
-                'count': cart.quantity,
-                'price': cart.price,
-            }
-            cart_list.append(cart_dict)
-
-        return {"customer_id": customer_id, 'cart_items': cart_list}
+# @ns_cart.route('/view_cart')
+# class CartViewResource(Resource):
+#     @ns_cart.doc('view_cart', responses={
+#         200: 'Cart fetched successfully',
+#         401: 'Unauthorized access'
+#     })
+#     def get(self):
+#         def token_check(token):
+#             if not token:
+#                 return {'message': 'You need to sign in to see your Cart bruh'}, 401
+#             try:
+#                 decoded_token = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
+#             except jwt.InvalidTokenError:
+#                 return {'message': 'Invalid token'}, 401
+#
+#             username = decoded_token.get('customer')
+#             customer = Customer.query.filter_by(username=username).first()
+#             return customer
+#
+#
+#         customer = token_check(request.headers.get('Authorization'))
+#
+#
+#         try:
+#             customer_id = customer.id
+#         except:
+#             return customer
+#
+#         carts = Cart.query.filter_by(customer_id=customer_id).all()
+#
+#         cart_list = []
+#         for cart in carts:
+#             cart_dict = {
+#                 'name': cart.product_id,
+#                 'count': cart.quantity,
+#                 'price': cart.price,
+#             }
+#             cart_list.append(cart_dict)
+#
+#         return {"customer_id": customer_id, 'cart_items': cart_list}
 
 

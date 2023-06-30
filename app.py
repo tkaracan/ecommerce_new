@@ -6,10 +6,10 @@ from models.models import db
 
 from config.config import GlobalConfig
 
-from controllers.cont_customer import ns_customer
-from controllers.cont_product import ns_product
-from controllers.cont_cart import ns_cart
-from controllers.cont_order import ns_order
+from controllers.controller_customer import ns_customer
+from controllers.controller_product import ns_product
+from controllers.controller_cart import ns_cart
+from controllers.controller_order import ns_order
 
 global_config = GlobalConfig()
 
@@ -40,7 +40,6 @@ api.add_namespace(ns_order)
 
 
 cors_origin_url = f"http://{global_config.CORS_IP}:{global_config.CORS_PORT}"
-print('hello world')
 cors = CORS(app, origins=[cors_origin_url])
 
 with app.app_context():
